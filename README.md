@@ -1,6 +1,6 @@
 # ETF2LDivs
 
-This SourceMod plugin shows players ETF2L team and division in the server chat when they are joining the server. It is based on [thraaawn's tETF2LDivision plugin](https://github.com/thraaawn/tETF2LDivision). At this point I wanted to thank [JoinedSenses](https://github.com/JoinedSenses) for converting whole tETF2LDivision plugin to a new SourceMod syntax and help provided to me while making this plugin.
+This SourceMod plugin shows players ETF2L team and division in the server chat when they are joining the server. It is based on [thraaawn's tETF2LDivision plugin](https://github.com/thraaawn/tETF2LDivision). At this point I wanted to thank [JoinedSenses](https://github.com/JoinedSenses) for converting whole tETF2LDivision plugin to a new SourceMod syntax and whole help provided to me while making this plugin.
 
 ## Dependencies
 
@@ -23,5 +23,5 @@ This SourceMod plugin shows players ETF2L team and division in the server chat w
 ## Commands
 
 - `!div` / `sm_div` - shows up divisions for all players on the server
-- `!divdetail <player nickname>` / `sm_divdetail <player nickname>` - opens a ETF2L profile in a MOTD window
+- `!divdetails <player nickname>` / `sm_divdetail <player nickname>` - opens a ETF2L profile in a MOTD window if it is possible to find the player on the server, otherwise ETF2L search window opens up
 - `div?` in any chat message will print sender's team/division info

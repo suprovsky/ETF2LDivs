@@ -3,7 +3,7 @@
 #include <sourcemod>
 #include <system2>
 #include <regex>
-#define VERSION 		"0.1.1"
+#define VERSION 		"0.1.2"
 
 ConVar g_hCvarEnabled;
 ConVar g_hCvarAnnounce;
@@ -61,7 +61,7 @@ public void OnPluginStart() {
 
 	// Provide a command for clients
 	RegConsoleCmd("sm_div", Command_ShowDivisions);
-	RegConsoleCmd("sm_divdetail", Command_ShowPlayerDetail);
+	RegConsoleCmd("sm_divdetails", Command_ShowPlayerDetail);
 }
 
 public void LateLoadClients(){
@@ -96,7 +96,6 @@ public void CvarTeamTypeChanged(ConVar convar, const char[] oldValue, const char
     char stringValue[32];
     convar.GetString(stringName, sizeof(stringName));
     convar.GetString(stringValue, sizeof(stringValue));
-    PrintToServer("Convar changed: %s, value: %s", stringName, stringValue);
     bool found;
     for (int i = 0; i < sizeof ACCEPTABLE_VALUES; ++i) {
         if (StrEqual(ACCEPTABLE_VALUES[i], newValue)) {
@@ -118,49 +117,64 @@ public Action Command_ShowPlayerDetail(int client, int args) {
 		return Plugin_Handled;
 	}
 
-	if (args == 0 || args > 1) {
-		ReplyToCommand(client, "No target specified. Usage: sm_divdetail <playername>");
+	if (args == 0) {
+		ReplyToCommand(client, "No target specified. Usage: sm_divdetails <playername>");
 		return Plugin_Handled;
 	}
-
-	char target[32];
-	GetCmdArg(1, target, sizeof(target));
-
-	// Process the targets
-	char targetName[MAX_TARGET_LENGTH];
-	int targetList[MAXPLAYERS];
-	bool targetTranslate;
-	int targetCount = ProcessTargetString(
-		target,
-		client,
-		targetList,
-		MAXPLAYERS,
-		COMMAND_FILTER_CONNECTED|COMMAND_FILTER_NO_MULTI,
-		targetName,
-		sizeof(targetName),
-		targetTranslate
-	);
-
-	if (targetCount <= 0) {
-		return Plugin_Handled;
+	char target[127];
+	for(int i = 1; i <= args; i++)
+	{
+		char buffer[127];
+		char space[2] = " ";
+		GetCmdArg(i, buffer, sizeof(buffer));
+		PrintToServer("divdetail argument %d: %s", i, buffer);
+		StrCat(target, sizeof(target), buffer);
+		StrCat(target, sizeof(target), space);
 	}
-	char playerID[12];
-	// Apply to all targets (this can only be one, but anyway...)
-	for (int i = 0; i < targetCount; i++) {
-		g_hPlayerData[targetList[i]].GetString("PlayerId", playerID, sizeof(playerID));
-		
-		if (strlen(playerID) <= 0) {
-			ReplyToCommand(client, "Sorry. The ETF2L user-id is unknown for '%s'", target);
-			return Plugin_Handled;
-		}
-
-		char url[128];
-		Format(url, sizeof(url), "https://etf2l.org/forum/user/%s/", playerID);
-
-		ShowMOTDPanel(client, "ETF2L Profile", url, MOTDPANEL_TYPE_URL);
+	target[strlen(target)-1] = 0;
+	PrintToServer("Concatenated nick: (%s)", target);
+	int matchesFound[512];
+	int findTargetsStatus = FindTargets(target, matchesFound);
+	if (findTargetsStatus == 1)
+	{
+        char playerID[12];
+        g_hPlayerData[matchesFound[0]].GetString("PlayerId", playerID, sizeof(playerID));
+        if (strlen(playerID) <= 0) {
+            ReplyToCommand(client, "Sorry. The ETF2L user-id is unknown for '%s'", target);
+            return Plugin_Handled;
+        }
+        char url[128];
+        Format(url, sizeof(url), "https://etf2l.org/forum/user/%s/", playerID);
+        ShowMOTDPanel(client, "ETF2L Profile", url, MOTDPANEL_TYPE_URL);
+    //}
 	}
-
+	else
+	{
+        char url[128];
+        Format(url, sizeof(url), "https://etf2l.org/search/%s/", target);
+        ShowMOTDPanel(client, "ETF2L Profile", url, MOTDPANEL_TYPE_URL);
+	}
 	return Plugin_Handled;
+}
+
+stock int FindTargets(const char[] name, int[] matches) {
+    if (name[0] == '\0') {
+        return -1;
+    }
+
+    char buffer[MAX_NAME_LENGTH];
+    int count = 0;
+    for (int i = 1; i <= MaxClients; ++i) {
+        if (IsClientInGame(i)) {
+            GetClientName(i, buffer, sizeof buffer);
+            if (StrEqual(buffer, name)) {
+                matches[count] = i;
+                ++count;
+            }
+        }
+    }
+
+    return count;
 }
 
 public Action Command_ShowDivisions(int client, int args) {
@@ -216,7 +230,7 @@ public Action Command_ShowDivisions(int client, int args) {
 }
 
 
-public Action OnClientSayCommand(int client, const char[] command, const char[] args)
+public Action OnClientDivCommand(int client, const char[] command, const char[] args)
 {    
     if (StrContains(args, "div?", false) != -1) {
         RequestFrame(frameRequestPrintDivReply, GetClientUserId(client));
@@ -373,7 +387,6 @@ public void GetAnnounceString(int client, char[] msg, int maxlen) {
 }
 
 public void AnnouncePlayerToAll(int client) {
-	PrintToServer("I'm starting announcing info for client %d", client);
 	char msg[253];
 	GetAnnounceString(client, msg, sizeof(msg));
 
@@ -388,7 +401,6 @@ public void AnnouncePlayerToAll(int client) {
 }
 
 public StringMap ReadPlayer(int client, const char[] path) {
-	PrintToServer("I'm starting reading data for client %d, path %s", client, path);
 	KeyValues kv = new KeyValues("response");
 	kv.ImportFromFile(path);
 
@@ -406,7 +418,6 @@ public StringMap ReadPlayer(int client, const char[] path) {
 	}
 
 	int etf2lID = kv.GetNum("id", -1);
-	PrintToServer("ETF2L ID: %d", etf2lID);
 	if (etf2lID == -1) {
 		delete kv;
 		return null;
@@ -455,31 +466,24 @@ public StringMap ReadPlayer(int client, const char[] path) {
 						do {
 							char sCompetitionId[8];
 							kv.GetSectionName(sCompetitionId, sizeof(sCompetitionId));
-
 							// Filter by category if only season should be shown
 							char sCategory[64];
 							kv.GetString("category", sCategory, sizeof(sCategory), "");
 							if (g_bSeasonsOnly && StrContains(sCategory, "Season", false) == -1) {
 								continue;
 							}
-
 							int iCompetitionId = StringToInt(sCompetitionId);
 							if (iCompetitionId > iHighestCompetitionId) {
 								iHighestCompetitionId = iCompetitionId;
-
 								kv.GetString("competition", eventName, sizeof(eventName));
-
 								if (kv.JumpToKey("division")) {
 									kv.GetString("name", divisionName, sizeof(divisionName));
-
 									kv.GoBack();
 								}
 							}
 						} while (kv.GotoNextKey(false));
-
 						kv.GoBack();
 					}
-
 					kv.GoBack();
 				}
 
@@ -489,7 +493,6 @@ public StringMap ReadPlayer(int client, const char[] path) {
 					if (g_hRegExSeason.Match(eventName) > 0) {
 					char sYear[4];
 					g_hRegExSeason.GetSubString(1, sYear, sizeof(sYear));
-
 					Format(eventName, sizeof(eventName), "Season %s", sYear);
 					}
 				}
@@ -502,18 +505,12 @@ public StringMap ReadPlayer(int client, const char[] path) {
 
 				char resultKey[255];
 				Format(resultKey, sizeof(resultKey), "team_%s", teamType);
-
 				hResult.SetValue(resultKey, teamData);
-
 			} while (kv.GotoNextKey(false));
-
 			kv.GoBack();
 		}
-
 		kv.GoBack();
 	}
-
 	delete kv;
-
 	return hResult;
 }
